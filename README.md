@@ -1,119 +1,139 @@
-# BizBoost — Free Business Intelligence Platform
+# BizBoost
 
-AI-powered tool for Indian SMBs to analyze physical store locations and grow online.
-**Zero cost to run** — uses free-tier AI APIs.
+BizBoost is an AI-powered business intelligence and digital growth advisory platform designed for local businesses and SMBs. It helps entrepreneurs bridge the gap between offline physical decisions (where to open a store) and online visibility (how to attract customers digitally). 
+
+Live Deployment Link: https://bizboost-gamma.vercel.app/
 
 ---
 
-## Quick start
+## The Problem and Our Solution
 
+For most local business owners, selecting a brick-and-mortar storefront is based on guesswork, while building an online presence feels overly technical. BizBoost solves both challenges in a single, cohesive dashboard:
+
+1. **Physical Intelligence**: Evaluates viability ratings, local footfall potential, competitor density, and identifies market gaps.
+2. **Digital Advisory**: Analyzes web speed, recommends modern tech stacks, drafts local keyword lists, and provides actionable marketing plans.
+3. **Strategic Advising**: A multi-step interactive business planner builds tailored SWOT analyses and projects startup budgets.
+
+---
+
+## Core Modules
+
+- **Location Analyzer**: Input your business category and target market to receive custom viability scores, local competitor maps, demographic fits, and alternative site suggestions.
+- **Digital & SEO Advisor**: Input your website URL to trigger a live SEO audit. The module evaluates page-speed characteristics, recommends tech stack optimization, and identifies localized keywords.
+- **Interactive Business Consultant**: Guides you through a structured questionnaire to refine business concepts, estimate startup costs, calculate SWOT profiles, and draft launch marketing roadmaps.
+- **Dedicated Chat Portal**: A domain-specific AI chat interface to ask questions about technology stacks, website hosting, digital vs. offline marketing budgets, and SSL setups.
+- **User Dashboard**: Save scans and business plans securely. Access, expand, delete, or export previous data directly from your personal feed.
+
+---
+
+## Technology Stack
+
+- **Framework**: Next.js (App Router, React, TypeScript)
+- **Styling**: Tailwind CSS for responsive layouts, custom vanilla CSS styling variables for glassmorphism
+- **Database & Backend**: Supabase (PostgreSQL, Row Level Security)
+- **Authentication**: Supabase Auth (Sign-in, registration, and Google OAuth flow)
+- **AI Integration**: Groq API (High-performance inference engine for contextual business advice)
+- **Icons**: Lucide React
+
+---
+
+## Getting Started
+
+Follow these steps to run BizBoost locally:
+
+### 1. Installation
+Clone the repository and install the dependencies:
 ```bash
-unzip bizboost.zip && cd bizboost
-cp .env.example .env.local
-# Edit .env.local — add your API key (see below)
 npm install
+```
+
+### 2. Configuration
+Create a `.env.local` file in the root directory and add the following keys:
+```env
+# AI API configuration
+AI_PROVIDER=groq
+GROQ_API_KEY=your_groq_api_key_here
+
+# Supabase Auth and Database configuration
+NEXT_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your-supabase-anon-key
+```
+
+### 3. Database Table Creation
+Execute this script in the **SQL Editor** of your Supabase Dashboard to create the tables, enable Row Level Security (RLS), and configure user isolation policies:
+
+```sql
+-- Table for saving location analysis scans
+create table public.saved_scans (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users(id) on delete cascade not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  biz_type text not null,
+  location text not null,
+  viability_score integer not null,
+  verdict text not null,
+  details jsonb not null
+);
+
+-- Table for saving startup roadmaps from the consultant
+create table public.saved_roadmaps (
+  id uuid default gen_random_uuid() primary key,
+  user_id uuid references auth.users(id) on delete cascade not null,
+  created_at timestamp with time zone default timezone('utc'::text, now()) not null,
+  biz_type text not null,
+  locality text not null,
+  budget text not null,
+  roadmap jsonb not null
+);
+
+-- Enable Row Level Security (RLS)
+alter table public.saved_scans enable row level security;
+alter table public.saved_roadmaps enable row level security;
+
+-- Create RLS policies
+create policy "Users can insert their own scans" on public.saved_scans 
+  for insert with check (auth.uid() = user_id);
+
+create policy "Users can view their own scans" on public.saved_scans 
+  for select using (auth.uid() = user_id);
+
+create policy "Users can delete their own scans" on public.saved_scans 
+  for delete using (auth.uid() = user_id);
+
+create policy "Users can insert their own roadmaps" on public.saved_roadmaps 
+  for insert with check (auth.uid() = user_id);
+
+create policy "Users can view their own roadmaps" on public.saved_roadmaps 
+  for select using (auth.uid() = user_id);
+
+create policy "Users can delete their own roadmaps" on public.saved_roadmaps 
+  for delete using (auth.uid() = user_id);
+```
+
+### 4. Running Locally
+Start the local Next.js development server:
+```bash
 npm run dev
 ```
-Open http://localhost:3000
+Open http://localhost:3000 in your browser to view the application.
 
 ---
 
-## Choosing a free AI provider
+## Future Scope
 
-Edit `AI_PROVIDER` in `.env.local`:
-
-| Provider | Free tier | Speed | Sign up |
-|---|---|---|---|
-| **Groq** (default) | 14,400 req/day, no card | ⚡ Very fast | console.groq.com |
-| **Gemini** | 1,500 req/day, 15 rpm | Fast | aistudio.google.com |
-| **OpenRouter** | Free credits on signup | Good | openrouter.ai |
-
-### Groq setup (recommended)
-```
-AI_PROVIDER=groq
-GROQ_API_KEY=gsk_...
-```
-
-### Gemini setup
-```
-AI_PROVIDER=gemini
-GEMINI_API_KEY=AIza...
-```
-
-### OpenRouter setup
-```
-AI_PROVIDER=openrouter
-OPENROUTER_API_KEY=sk-or-...
-```
+- **Interactive Heatmap Visualizations**: Integrate mapping libraries (such as Leaflet or Mapbox) to visually plot competitor locations, heatmaps of target demographic density, and high-footfall corridors.
+- **Live Third-Party SEO Testing APIs**: Integrate Google PageSpeed Insights and Lighthouse APIs directly into the SEO Advisor to fetch actual real-time site audit performance scores.
+- **Census and Demographic Datasets**: Incorporate regional census data APIs to offer localized insights into income levels, age distribution, and purchasing power per neighborhood.
+- **Financial Projections & Budget Ledger**: Add a ledger system allowing users to input specific numbers, auto-calculate ROI break-evens, and download standardized CSV/PDF reports for bank loans.
+- **Multi-Lingual Localization**: Provide localized UI translations and localized AI voice assistant responses in regional languages to support grassroots shop owners.
 
 ---
 
-## Features
+## Visual Design Philosophy
 
-### Location Analyzer (`/location`)
-- Viability score (0–100) for your business idea + area
-- Footfall, demographic fit, and market gap scores  
-- Real competitor data (optional, via Google Places free tier)
-- 4 alternative nearby locations with reasons
-- Pre-opening action checklist
-
-### Digital & SEO Advisor (`/digital`)
-- Live Google PageSpeed audit (completely free, no key needed)
-- Tech stack advice — when to move off WordPress
-- SEO checklist: schema, backlinks, local citations, mobile
-- Primary + long-tail keyword strategy
-- Content ideas for organic traffic
-- Audience targeting channels (free vs paid)
-- Quick wins to act on this week
+The application features a clean, warm-white design system centered on high readability. It utilizes soft pastel background gradients, light glassmorphic cards, responsive flex spacing, and subtle hover scale adjustments to deliver an engaging, premium, and professional user experience.
 
 ---
-
-## Deploy free on Vercel
-
-```bash
-npm install -g vercel
-vercel
-```
-
-Add your env vars in Vercel dashboard → Project → Settings → Environment Variables.
-
----
-
-## Project structure
-
-```
-src/
-  lib/
-    ai.ts                   ← Universal AI client (Groq / Gemini / OpenRouter)
-  app/
-    page.tsx                ← Landing page
-    location/page.tsx       ← Location analyzer UI
-    digital/page.tsx        ← SEO advisor UI
-    api/
-      analyze-location/     ← Location AI route
-      analyze-seo/          ← SEO AI route
-  components/
-    ui/shared.tsx           ← Reusable UI components
-```
-
----
-
-## Optional: Google Places API (real competitor data)
-
-1. Go to console.cloud.google.com  
-2. Create project → Enable **Places API** → Create API key  
-3. Add to `.env.local`: `NEXT_PUBLIC_GOOGLE_PLACES_API_KEY=AIza...`  
-4. User enters it in the Location form (never stored server-side)
-
-Free tier: ~300 searches/month.
-
----
-
-## Extend it
-
-- **User accounts + history**: add Supabase free tier (`npm install @supabase/supabase-js`)
-- **PDF report export**: add `@react-pdf/renderer`
-- **More data**: OpenStreetMap Overpass API (amenities), data.gov.in (demographics)
 
 ## License
 MIT
