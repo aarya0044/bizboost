@@ -1,9 +1,10 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { MapPin, Building2, Star, ChevronRight, Loader2 } from 'lucide-react'
+import { supabase } from '@/lib/supabase'
 import {
   PageShell, Card, ScoreRing, MetricCard, InsightBlock, VerdictBadge,
-  FormField, inputClass, textareaClass
+  FormField, inputClass
 } from '@/components/ui/shared'
 
 interface LocationResult {
@@ -31,6 +32,42 @@ export default function LocationPage() {
   const [result, setResult] = useState<LocationResult | null>(null)
   const [competitors, setCompetitors] = useState<Competitor[] | null>(null)
   const [error, setError] = useState('')
+  const [user, setUser] = useState<any>(null)
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle')
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null)
+    })
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      setUser(session?.user ?? null)
+    })
+    return () => subscription.unsubscribe()
+  }, [])
+
+  useEffect(() => {
+    setSaveStatus('idle')
+  }, [result])
+
+  async function saveReport() {
+    if (!result || !user) return
+    setSaveStatus('saving')
+    try {
+      const { error } = await supabase.from('saved_scans').insert([{
+        user_id: user.id,
+        biz_type: form.bizType,
+        location: form.location,
+        viability_score: result.viabilityScore,
+        verdict: result.verdict,
+        details: result
+      }])
+      if (error) throw error
+      setSaveStatus('saved')
+    } catch (err) {
+      console.error('Error saving scan:', err)
+      setSaveStatus('error')
+    }
+  }
 
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }))
@@ -60,14 +97,14 @@ export default function LocationPage() {
 
   return (
     <PageShell active="location">
-      <div className="mb-6">
-        <h1 className="text-2xl font-semibold text-gray-900 mb-1">Location Analyzer</h1>
-        <p className="text-gray-500 text-sm">Find out if your business idea will thrive in a specific area — and where else to look if not.</p>
+      <div className="mb-8 font-sans">
+        <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight mb-1">Location Analyzer</h1>
+        <p className="text-slate-500 text-xs mt-1.5 leading-relaxed font-medium">Find out if your business idea will thrive in a specific area — and where else to look if not.</p>
       </div>
 
-      <Card className="mb-4">
-        <h2 className="text-sm font-semibold text-gray-700 mb-4 flex items-center gap-2"><Building2 size={16} /> Your business details</h2>
-        <div className="grid grid-cols-2 gap-4 mb-4">
+      <Card className="mb-6 animate-scale-in">
+        <h2 className="text-sm font-bold text-slate-800 mb-5 flex items-center gap-2 border-b border-slate-100 pb-3"><Building2 size={16} className="text-teal-650" /> Your Business Profile</h2>
+        <div className="grid grid-cols-2 gap-5 mb-5">
           <FormField label="Business type or name *">
             <input className={inputClass} placeholder="e.g. Optical store, Lenskart franchise" value={form.bizType} onChange={set('bizType')} />
           </FormField>
@@ -82,52 +119,63 @@ export default function LocationPage() {
           </FormField>
         </div>
 
-        <details className="mb-4">
-          <summary className="text-xs text-gray-400 cursor-pointer hover:text-gray-600 select-none">
-            + Add Google Places API key for real competitor data (optional, free tier)
+        <details className="mb-6 group">
+          <summary className="text-[10px] text-slate-400 cursor-pointer hover:text-slate-800 select-none font-bold uppercase tracking-wider transition-colors">
+            + Add Google Places API key for real competitor data (optional)
           </summary>
-          <div className="mt-3">
+          <div className="mt-4 p-4.5 bg-slate-50 border border-slate-100 rounded-xl animate-fade-in-up">
             <FormField label="Google Places API key">
               <input type="password" className={inputClass} placeholder="AIza..." value={form.placesApiKey} onChange={set('placesApiKey')} />
             </FormField>
-            <p className="text-xs text-gray-400 mt-1.5">
-              Get a free key at <span className="text-blue-500">console.cloud.google.com</span> → Enable "Places API" → Create credentials.
-              Without it, AI uses its own city knowledge.
+            <p className="text-[10px] text-slate-500 mt-2 leading-relaxed font-medium">
+              Get a free key at <a href="https://console.cloud.google.com" target="_blank" rel="noreferrer" className="text-teal-600 hover:underline font-semibold">console.cloud.google.com</a>. Enable the Places API and create an API key.
+              Without it, the AI uses its internal city knowledge.
             </p>
           </div>
         </details>
 
-        {error && <p className="text-sm text-red-500 mb-3">{error}</p>}
+        {error && <p className="text-xs font-semibold text-red-500 mb-4">{error}</p>}
 
         <button
           onClick={analyze}
           disabled={loading}
-          className="flex items-center gap-2 bg-brand-500 text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:bg-brand-600 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+          className="flex items-center gap-2 bg-teal-600 hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed text-white px-5 py-3.5 rounded-xl text-xs font-bold transition-all shadow-lg shadow-teal-500/10 active:scale-98"
         >
-          {loading ? <><Loader2 size={15} className="animate-spin" /> Analyzing…</> : <><MapPin size={15} /> Analyze this location</>}
+          {loading ? <><Loader2 size={14} className="animate-spin" /> Analyzing…</> : <><MapPin size={14} /> Analyze this location</>}
         </button>
       </Card>
 
       {loading && (
-        <div className="text-center py-16 text-gray-400">
-          <Loader2 size={32} className="animate-spin mx-auto mb-3 text-brand-400" />
-          <p className="text-sm">Checking competitors, demographics, and market signals…</p>
+        <div className="text-center py-16 text-slate-500 bg-slate-50 border border-slate-100 rounded-2xl animate-pulse-glow">
+          <Loader2 size={32} className="animate-spin mx-auto mb-3 text-teal-600" />
+          <p className="text-xs font-medium">Checking competitor density, local demographics, and market signals…</p>
         </div>
       )}
 
       {result && (
-        <div className="space-y-4 fade-in">
+        <div className="space-y-6 animate-fade-in-up">
           {/* Score overview */}
           <Card>
-            <h2 className="text-sm font-semibold text-gray-700 mb-4">Location verdict — {form.location}</h2>
-            <div className="flex items-center gap-5 mb-4">
+            <h2 className="text-sm font-bold text-slate-800 mb-5 border-b border-slate-100 pb-3">Location verdict — {form.location}</h2>
+            <div className="flex items-center gap-5 mb-6">
               <ScoreRing score={result.viabilityScore} />
               <div>
                 <VerdictBadge score={result.viabilityScore} verdict={result.verdict} />
-                <p className="text-sm text-gray-500 mt-2 max-w-sm">{result.verdictReason}</p>
+                <p className="text-xs text-slate-500 mt-2.5 max-w-md leading-relaxed font-medium">{result.verdictReason}</p>
+                {user ? (
+                  <button
+                    onClick={saveReport}
+                    disabled={saveStatus === 'saving' || saveStatus === 'saved'}
+                    className="mt-4 flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 border border-teal-200 hover:bg-teal-100/70 disabled:opacity-50 text-teal-800 font-bold text-[10px] rounded-lg transition-all active:scale-95"
+                  >
+                    {saveStatus === 'saving' ? 'Saving...' : saveStatus === 'saved' ? 'Saved to Dashboard' : 'Save Report to Dashboard'}
+                  </button>
+                ) : (
+                  <p className="text-[10px] text-slate-400 mt-4 font-bold uppercase tracking-wider">Sign in to save this analysis to your account.</p>
+                )}
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-3 gap-4 border-t border-slate-100 pt-5">
               <MetricCard label="Footfall potential" value={result.footfallScore} />
               <MetricCard label="Demographic fit" value={result.demographicMatch} />
               <MetricCard label="Market gap" value={result.marketGap} />
@@ -136,7 +184,7 @@ export default function LocationPage() {
 
           {/* Key insights */}
           <Card>
-            <h2 className="text-sm font-semibold text-gray-700 mb-4">Key insights</h2>
+            <h2 className="text-sm font-bold text-slate-800 mb-4.5">Core Market Insights</h2>
             {result.keyInsights.map((ins, i) => (
               <InsightBlock key={i} type={ins.type} title={ins.title} text={ins.text} />
             ))}
@@ -145,20 +193,20 @@ export default function LocationPage() {
           {/* Competitors */}
           {competitors && competitors.length > 0 && (
             <Card>
-              <h2 className="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
-                <Star size={15} className="text-amber-400" /> Nearby competitors (live from Google)
+              <h2 className="text-sm font-bold text-slate-800 mb-4 flex items-center gap-2 border-b border-slate-100 pb-3">
+                <Star size={15} className="text-amber-500" /> Nearby Competitors (Google Places API)
               </h2>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {competitors.map((c, i) => (
-                  <div key={i} className="flex items-center justify-between py-2.5 border-b border-gray-50 last:border-0">
+                  <div key={i} className="flex items-center justify-between py-3 border-b border-slate-100 last:border-0 hover:bg-slate-50/50 px-2.5 rounded-lg transition-colors">
                     <div>
-                      <p className="text-sm font-medium text-gray-800">{c.name}</p>
-                      <p className="text-xs text-gray-400 mt-0.5">{c.address}</p>
+                      <p className="text-xs font-bold text-slate-800">{c.name}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5 font-medium">{c.address}</p>
                     </div>
-                    <div className="flex items-center gap-1 text-sm text-amber-500 font-medium flex-shrink-0 ml-3">
-                      <Star size={13} fill="currentColor" />
+                    <div className="flex items-center gap-1.5 text-xs text-amber-700 font-bold flex-shrink-0 ml-3 bg-amber-50 border border-amber-200 px-2 py-1 rounded-lg">
+                      <Star size={12} fill="currentColor" className="text-amber-500" />
                       {c.rating}
-                      <span className="text-gray-400 font-normal">({c.total})</span>
+                      <span className="text-slate-400 font-normal">({c.total})</span>
                     </div>
                   </div>
                 ))}
@@ -168,18 +216,22 @@ export default function LocationPage() {
 
           {/* Alternative locations */}
           <Card>
-            <h2 className="text-sm font-semibold text-gray-700 mb-1">Alternative locations to consider</h2>
-            <p className="text-xs text-gray-400 mb-4">Nearby areas that might offer better growth potential within a few km</p>
-            <div className="grid grid-cols-2 gap-3">
+            <h2 className="text-sm font-bold text-slate-800 mb-1">Alternative Areas to Consider</h2>
+            <p className="text-[10px] text-slate-400 mb-4.5 font-bold uppercase tracking-wider">Nearby locations with potential demand and market gaps</p>
+            <div className="grid grid-cols-2 gap-4">
               {result.alternativeLocations.map((loc, i) => (
-                <div key={i} className="border border-gray-100 hover:border-brand-300 rounded-xl p-3.5 cursor-pointer transition-colors group">
-                  <div className="flex items-start justify-between mb-1">
-                    <p className="text-sm font-medium text-gray-800">{loc.name}</p>
-                    <span className="text-xs text-gray-400 ml-2 flex-shrink-0">{loc.distance}</span>
+                <div
+                  key={i}
+                  onClick={() => setForm(f => ({ ...f, location: loc.name }))}
+                  className="border border-slate-200/60 bg-white hover:border-teal-500/25 hover:bg-slate-50/30 rounded-xl p-4 cursor-pointer transition-all duration-300 group hover:-translate-y-0.5 shadow-sm"
+                >
+                  <div className="flex items-start justify-between mb-1.5">
+                    <p className="text-xs font-bold text-slate-800 group-hover:text-teal-600 transition-colors">{loc.name}</p>
+                    <span className="text-[10px] text-slate-400 ml-2 flex-shrink-0 font-bold">{loc.distance}</span>
                   </div>
-                  <p className="text-xs text-gray-500 leading-relaxed">{loc.reason}</p>
-                  <div className="flex items-center gap-1 text-xs text-brand-500 mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                    Analyze this spot <ChevronRight size={12} />
+                  <p className="text-[11px] text-slate-500 leading-relaxed font-medium">{loc.reason}</p>
+                  <div className="flex items-center gap-1 text-[10px] text-teal-600 mt-3.5 font-bold uppercase tracking-wider opacity-0 group-hover:opacity-100 transition-opacity">
+                    Analyze this spot <ChevronRight size={11} />
                   </div>
                 </div>
               ))}
@@ -188,14 +240,14 @@ export default function LocationPage() {
 
           {/* Actions */}
           <Card>
-            <h2 className="text-sm font-semibold text-gray-700 mb-4">Before you open — do these first</h2>
-            <div className="space-y-3">
+            <h2 className="text-sm font-bold text-slate-800 mb-5 border-b border-slate-100 pb-3">Pre-Launch Actions</h2>
+            <div className="space-y-3.5">
               {result.topActions.map((action, i) => (
                 <div key={i} className="flex items-start gap-3">
-                  <span className="w-6 h-6 rounded-full bg-brand-50 text-brand-600 flex items-center justify-center text-xs font-semibold flex-shrink-0 mt-0.5">
+                  <span className="w-5.5 h-5.5 rounded-full bg-teal-50 border border-teal-100 text-teal-600 flex items-center justify-center text-[10px] font-bold flex-shrink-0 mt-0.5">
                     {i + 1}
                   </span>
-                  <p className="text-sm text-gray-700 leading-relaxed">{action}</p>
+                  <p className="text-xs text-slate-650 leading-relaxed">{action}</p>
                 </div>
               ))}
             </div>

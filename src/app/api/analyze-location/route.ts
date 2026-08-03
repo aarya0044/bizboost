@@ -1,22 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { askAI, parseJSON } from '@/lib/ai'
+import { fetchOSMCompetitors } from '@/lib/osm'
 
 async function fetchCompetitors(bizType: string, location: string, apiKey: string) {
-  if (!apiKey) return null
-  try {
-    const query = encodeURIComponent(`${bizType} in ${location}`)
-    const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${query}&key=${apiKey}`
-    const res = await fetch(url)
-    const data = await res.json()
-    return data.results?.slice(0, 6).map((p: any) => ({
-      name: p.name,
-      rating: p.rating ?? 'N/A',
-      total: p.user_ratings_total ?? 0,
-      address: p.formatted_address ?? '',
-    }))
-  } catch {
-    return null
+  if (apiKey) {
+    try {
+      const query = encodeURIComponent(`${bizType} in ${location}`)
+      const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${query}&key=${apiKey}`
+      const res = await fetch(url)
+      const data = await res.json()
+      if (data.results && data.results.length > 0) {
+        return data.results.slice(0, 6).map((p: any) => ({
+          name: p.name,
+          rating: p.rating ?? 'N/A',
+          total: p.user_ratings_total ?? 0,
+          address: p.formatted_address ?? '',
+        }))
+      }
+    } catch {
+      // Fallback to OSM
+    }
   }
+  // OpenStreetMap free fallback
+  return fetchOSMCompetitors(bizType, location)
 }
 
 export async function POST(req: NextRequest) {
@@ -26,9 +32,9 @@ export async function POST(req: NextRequest) {
 
     const competitors = await fetchCompetitors(bizType, location, placesApiKey)
 
-    const competitorContext = competitors
-      ? `Real competitor data from Google Places:\n` +
-        competitors.map((c: any) => `- ${c.name}: ⭐${c.rating} (${c.total} reviews) — ${c.address}`).join('\n')
+    const competitorContext = competitors && competitors.length > 0
+      ? `Real competitor data from map database:\n` +
+        competitors.map((c: any) => `- ${c.name}: ${c.rating === 'Map Data' ? 'Physical Shop' : '⭐' + c.rating + ' (' + c.total + ' reviews)'} — ${c.address}`).join('\n')
       : 'No live competitor data — estimate based on city and locality knowledge.'
 
     const system = `You are a business location intelligence expert with deep knowledge of Indian cities,

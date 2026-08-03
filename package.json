@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.108.1",
     "clsx": "^2.1.1",
     "groq-sdk": "^1.2.1",
     "lucide-react": "^0.400.0",
