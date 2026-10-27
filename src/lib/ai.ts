@@ -57,7 +57,7 @@ async function callGroq(system: string, userPrompt: string, modelOverride?: stri
 }
 
 // ── Gemini ────────────────────────────────────────────────────────────────────
-async function callGemini(system: string, userPrompt: string, modelOverride?: string): Promise<string> {
+async function callGemini(system: string, userPrompt: string, modelOverride?: string, retries: number = 2): Promise<string> {
   const key = process.env.GEMINI_API_KEY
   if (!key) throw new Error('GEMINI_API_KEY is not set in .env.local')
 
@@ -75,11 +75,12 @@ async function callGemini(system: string, userPrompt: string, modelOverride?: st
   })
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    if (res.status === 404 && model !== 'gemini-3.8-flash') {
-      console.warn(`Gemini model ${model} not available, falling back to gemini-3.8-flash`)
-      return callGemini(system, userPrompt, 'gemini-3.8-flash')
+    if ((res.status === 503 || res.status === 429) && retries > 0) {
+      console.warn(`Gemini temporary ${res.status} demand spike, retrying in 1.5s...`)
+      await new Promise((r) => setTimeout(r, 1500))
+      return callGemini(system, userPrompt, model, retries - 1)
     }
+    const err = await res.json().catch(() => ({}))
     throw new Error(`Gemini error ${res.status}: ${JSON.stringify(err?.error?.message || res.statusText)}`)
   }
 
@@ -161,7 +162,7 @@ async function callGroqChat(messages: AIMessage[], modelOverride?: string): Prom
   return data.choices?.[0]?.message?.content ?? ''
 }
 
-async function callGeminiChat(messages: AIMessage[], modelOverride?: string): Promise<string> {
+async function callGeminiChat(messages: AIMessage[], modelOverride?: string, retries: number = 2): Promise<string> {
   const key = process.env.GEMINI_API_KEY
   if (!key) throw new Error('GEMINI_API_KEY is not set in .env.local')
 
@@ -190,11 +191,12 @@ async function callGeminiChat(messages: AIMessage[], modelOverride?: string): Pr
   })
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    if (res.status === 404 && model !== 'gemini-3.8-flash') {
-      console.warn(`Gemini model ${model} not available, falling back to gemini-3.8-flash`)
-      return callGeminiChat(messages, 'gemini-3.8-flash')
+    if ((res.status === 503 || res.status === 429) && retries > 0) {
+      console.warn(`Gemini temporary ${res.status} demand spike, retrying in 1.5s...`)
+      await new Promise((r) => setTimeout(r, 1500))
+      return callGeminiChat(messages, model, retries - 1)
     }
+    const err = await res.json().catch(() => ({}))
     throw new Error(`Gemini error ${res.status}: ${JSON.stringify(err?.error?.message || res.statusText)}`)
   }
 
