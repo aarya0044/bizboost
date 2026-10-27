@@ -18,7 +18,7 @@ const PROVIDER = (process.env.AI_PROVIDER || 'groq').toLowerCase()
 // ── Model defaults per provider ──────────────────────────────────────────────
 const MODELS: Record<string, string> = {
   groq:        process.env.AI_MODEL || 'llama-3.1-8b-instant',      // universal free tier, very fast (~560 t/s)
-  gemini:      process.env.AI_MODEL || 'gemini-2.0-flash',           // current Gemini 2.0 Flash production model
+  gemini:      process.env.AI_MODEL || 'gemini-3.8-flash',           // current Gemini 3.8 Flash production model
   openrouter:  process.env.AI_MODEL || 'mistralai/mistral-7b-instruct:free',
 }
 
@@ -76,9 +76,9 @@ async function callGemini(system: string, userPrompt: string, modelOverride?: st
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    if (res.status === 404 && model !== 'gemini-2.0-flash') {
-      console.warn(`Gemini model ${model} not available, falling back to gemini-2.0-flash`)
-      return callGemini(system, userPrompt, 'gemini-2.0-flash')
+    if (res.status === 404 && model !== 'gemini-3.8-flash') {
+      console.warn(`Gemini model ${model} not available, falling back to gemini-3.8-flash`)
+      return callGemini(system, userPrompt, 'gemini-3.8-flash')
     }
     throw new Error(`Gemini error ${res.status}: ${JSON.stringify(err?.error?.message || res.statusText)}`)
   }
@@ -191,9 +191,9 @@ async function callGeminiChat(messages: AIMessage[], modelOverride?: string): Pr
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
-    if (res.status === 404 && model !== 'gemini-2.0-flash') {
-      console.warn(`Gemini model ${model} not available, falling back to gemini-2.0-flash`)
-      return callGeminiChat(messages, 'gemini-2.0-flash')
+    if (res.status === 404 && model !== 'gemini-3.8-flash') {
+      console.warn(`Gemini model ${model} not available, falling back to gemini-3.8-flash`)
+      return callGeminiChat(messages, 'gemini-3.8-flash')
     }
     throw new Error(`Gemini error ${res.status}: ${JSON.stringify(err?.error?.message || res.statusText)}`)
   }
