@@ -63,7 +63,15 @@ export default function LoginPage() {
         router.replace('/dashboard')
       }
     } catch (err: any) {
-      setMessage({ text: err.message || 'Authentication failed.', type: 'error' })
+      const msg = err.message || ''
+      if (msg.toLowerCase().includes('failed to fetch')) {
+        setMessage({
+          text: 'Unable to connect to the database (Failed to fetch). If you are on Supabase free tier, your project may be paused due to inactivity. Please restore/unpause it from your Supabase dashboard.',
+          type: 'error'
+        })
+      } else {
+        setMessage({ text: msg || 'Authentication failed.', type: 'error' })
+      }
     } finally {
       setLoading(false)
     }
@@ -85,7 +93,15 @@ export default function LoginPage() {
       })
       if (error) throw error
     } catch (err: any) {
-      setMessage({ text: err.message || 'Google authentication failed.', type: 'error' })
+      const msg = err.message || ''
+      if (msg.toLowerCase().includes('failed to fetch')) {
+        setMessage({
+          text: 'Unable to connect to the database (Failed to fetch). Please check if your Supabase project is active/unpaused.',
+          type: 'error'
+        })
+      } else {
+        setMessage({ text: msg || 'Google authentication failed.', type: 'error' })
+      }
       setGoogleLoading(false)
     }
   }

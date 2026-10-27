@@ -17,21 +17,23 @@ const PROVIDER = (process.env.AI_PROVIDER || 'groq').toLowerCase()
 
 // ── Model defaults per provider ──────────────────────────────────────────────
 const MODELS: Record<string, string> = {
-  groq:        process.env.AI_MODEL || 'llama-3.3-70b-versatile',   // free, very fast
+  groq:        process.env.AI_MODEL || 'llama-3.1-8b-instant',      // universal free tier, very fast (~560 t/s)
   gemini:      process.env.AI_MODEL || 'gemini-1.5-flash',           // free 15 rpm
   openrouter:  process.env.AI_MODEL || 'mistralai/mistral-7b-instruct:free',
 }
 
 // ── Groq ─────────────────────────────────────────────────────────────────────
-async function callGroq(system: string, userPrompt: string): Promise<string> {
+async function callGroq(system: string, userPrompt: string, modelOverride?: string): Promise<string> {
   const key = process.env.GROQ_API_KEY
   if (!key) throw new Error('GROQ_API_KEY is not set in .env.local')
+
+  const model = modelOverride || MODELS.groq
 
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify({
-      model: MODELS.groq,
+      model: model,
       temperature: 0.3,
       max_tokens: 1500,
       messages: [
@@ -43,6 +45,10 @@ async function callGroq(system: string, userPrompt: string): Promise<string> {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
+    if (res.status === 404 && model !== 'llama-3.1-8b-instant') {
+      console.warn(`Groq model ${model} not available, falling back to llama-3.1-8b-instant`)
+      return callGroq(system, userPrompt, 'llama-3.1-8b-instant')
+    }
     throw new Error(`Groq error ${res.status}: ${err?.error?.message || res.statusText}`)
   }
 
@@ -121,15 +127,17 @@ export async function askAI(system: string, userPrompt: string): Promise<string>
 }
 
 // ── Chat Helpers ──────────────────────────────────────────────────────────────
-async function callGroqChat(messages: AIMessage[]): Promise<string> {
+async function callGroqChat(messages: AIMessage[], modelOverride?: string): Promise<string> {
   const key = process.env.GROQ_API_KEY
   if (!key) throw new Error('GROQ_API_KEY is not set in .env.local')
+
+  const model = modelOverride || MODELS.groq
 
   const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${key}` },
     body: JSON.stringify({
-      model: MODELS.groq,
+      model: model,
       temperature: 0.7,
       max_tokens: 1500,
       messages: messages,
@@ -138,6 +146,10 @@ async function callGroqChat(messages: AIMessage[]): Promise<string> {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
+    if (res.status === 404 && model !== 'llama-3.1-8b-instant') {
+      console.warn(`Groq model ${model} not available, falling back to llama-3.1-8b-instant`)
+      return callGroqChat(messages, 'llama-3.1-8b-instant')
+    }
     throw new Error(`Groq error ${res.status}: ${err?.error?.message || res.statusText}`)
   }
 
