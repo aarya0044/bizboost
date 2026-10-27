@@ -16,9 +16,16 @@ export interface AIMessage {
 const PROVIDER = (process.env.AI_PROVIDER || 'groq').toLowerCase()
 
 // ── Model defaults per provider ──────────────────────────────────────────────
+const GEMINI_MODELS = [
+  'gemini-1.5-flash-8b',
+  'gemini-3.8-flash',
+  'gemini-2.5-flash',
+  'gemini-1.5-pro',
+]
+
 const MODELS: Record<string, string> = {
-  groq:        process.env.AI_MODEL || 'llama-3.1-8b-instant',      // universal free tier, very fast (~560 t/s)
-  gemini:      process.env.AI_MODEL || 'gemini-3.8-flash',           // current Gemini 3.8 Flash production model
+  groq:        process.env.AI_MODEL || 'llama-3.1-8b-instant',
+  gemini:      process.env.AI_MODEL || GEMINI_MODELS[0],
   openrouter:  process.env.AI_MODEL || 'mistralai/mistral-7b-instruct:free',
 }
 
@@ -57,11 +64,11 @@ async function callGroq(system: string, userPrompt: string, modelOverride?: stri
 }
 
 // ── Gemini ────────────────────────────────────────────────────────────────────
-async function callGemini(system: string, userPrompt: string, modelOverride?: string, retries: number = 2): Promise<string> {
+async function callGemini(system: string, userPrompt: string, modelIndex: number = 0): Promise<string> {
   const key = process.env.GEMINI_API_KEY
   if (!key) throw new Error('GEMINI_API_KEY is not set in .env.local')
 
-  const model = modelOverride || MODELS.gemini
+  const model = process.env.AI_MODEL || GEMINI_MODELS[modelIndex] || GEMINI_MODELS[0]
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`
 
   const res = await fetch(url, {
@@ -76,10 +83,10 @@ async function callGemini(system: string, userPrompt: string, modelOverride?: st
   })
 
   if (!res.ok) {
-    if ((res.status === 503 || res.status === 429) && retries > 0) {
-      console.warn(`Gemini temporary ${res.status} demand spike, retrying in 1.5s...`)
-      await new Promise((r) => setTimeout(r, 1500))
-      return callGemini(system, userPrompt, model, retries - 1)
+    // If the model has high demand (503), rate limit (429), or 404, cascade to next available Gemini model
+    if ((res.status === 503 || res.status === 429 || res.status === 404) && modelIndex < GEMINI_MODELS.length - 1) {
+      console.warn(`Gemini model ${model} returned ${res.status}, cascading to ${GEMINI_MODELS[modelIndex + 1]}...`)
+      return callGemini(system, userPrompt, modelIndex + 1)
     }
     const err = await res.json().catch(() => ({}))
     throw new Error(`Gemini error ${res.status}: ${JSON.stringify(err?.error?.message || res.statusText)}`)
@@ -124,11 +131,20 @@ async function callOpenRouter(system: string, userPrompt: string): Promise<strin
 
 // ── Public function ───────────────────────────────────────────────────────────
 export async function askAI(system: string, userPrompt: string): Promise<string> {
-  switch (PROVIDER) {
-    case 'gemini':      return callGemini(system, userPrompt)
-    case 'openrouter':  return callOpenRouter(system, userPrompt)
-    case 'groq':
-    default:            return callGroq(system, userPrompt)
+  const primary = PROVIDER
+  try {
+    if (primary === 'gemini') return await callGemini(system, userPrompt)
+    if (primary === 'openrouter') return await callOpenRouter(system, userPrompt)
+    return await callGroq(system, userPrompt)
+  } catch (err: any) {
+    console.warn(`Primary provider ${primary} failed (${err.message}), trying backup provider...`)
+    if (primary !== 'gemini' && process.env.GEMINI_API_KEY) {
+      return await callGemini(system, userPrompt)
+    }
+    if (primary !== 'groq' && process.env.GROQ_API_KEY) {
+      return await callGroq(system, userPrompt)
+    }
+    throw err
   }
 }
 
@@ -163,11 +179,11 @@ async function callGroqChat(messages: AIMessage[], modelOverride?: string): Prom
   return data.choices?.[0]?.message?.content ?? ''
 }
 
-async function callGeminiChat(messages: AIMessage[], modelOverride?: string, retries: number = 2): Promise<string> {
+async function callGeminiChat(messages: AIMessage[], modelIndex: number = 0): Promise<string> {
   const key = process.env.GEMINI_API_KEY
   if (!key) throw new Error('GEMINI_API_KEY is not set in .env.local')
 
-  const model = modelOverride || MODELS.gemini
+  const model = process.env.AI_MODEL || GEMINI_MODELS[modelIndex] || GEMINI_MODELS[0]
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`
 
   const systemMessage = messages.find(m => m.role === 'system')?.content || ''
@@ -193,10 +209,9 @@ async function callGeminiChat(messages: AIMessage[], modelOverride?: string, ret
   })
 
   if (!res.ok) {
-    if ((res.status === 503 || res.status === 429) && retries > 0) {
-      console.warn(`Gemini temporary ${res.status} demand spike, retrying in 1.5s...`)
-      await new Promise((r) => setTimeout(r, 1500))
-      return callGeminiChat(messages, model, retries - 1)
+    if ((res.status === 503 || res.status === 429 || res.status === 404) && modelIndex < GEMINI_MODELS.length - 1) {
+      console.warn(`Gemini model ${model} returned ${res.status}, cascading to ${GEMINI_MODELS[modelIndex + 1]}...`)
+      return callGeminiChat(messages, modelIndex + 1)
     }
     const err = await res.json().catch(() => ({}))
     throw new Error(`Gemini error ${res.status}: ${JSON.stringify(err?.error?.message || res.statusText)}`)
@@ -206,41 +221,21 @@ async function callGeminiChat(messages: AIMessage[], modelOverride?: string, ret
   return data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
 }
 
-async function callOpenRouterChat(messages: AIMessage[]): Promise<string> {
-  const key = process.env.OPENROUTER_API_KEY
-  if (!key) throw new Error('OPENROUTER_API_KEY is not set in .env.local')
-
-  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${key}`,
-      'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000',
-      'X-Title': 'BizBoost',
-    },
-    body: JSON.stringify({
-      model: MODELS.openrouter,
-      temperature: 0.7,
-      max_tokens: 1500,
-      messages: messages,
-    }),
-  })
-
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}))
-    throw new Error(`OpenRouter error ${res.status}: ${err?.error?.message || res.statusText}`)
-  }
-
-  const data = await res.json()
-  return data.choices?.[0]?.message?.content ?? ''
-}
-
 export async function askAIChat(messages: AIMessage[]): Promise<string> {
-  switch (PROVIDER) {
-    case 'gemini':      return callGeminiChat(messages)
-    case 'openrouter':  return callOpenRouterChat(messages)
-    case 'groq':
-    default:            return callGroqChat(messages)
+  const primary = PROVIDER
+  try {
+    if (primary === 'gemini') return await callGeminiChat(messages)
+    if (primary === 'openrouter') return await callOpenRouterChat(messages)
+    return await callGroqChat(messages)
+  } catch (err: any) {
+    console.warn(`Primary chat provider ${primary} failed (${err.message}), trying backup provider...`)
+    if (primary !== 'gemini' && process.env.GEMINI_API_KEY) {
+      return await callGeminiChat(messages)
+    }
+    if (primary !== 'groq' && process.env.GROQ_API_KEY) {
+      return await callGroqChat(messages)
+    }
+    throw err
   }
 }
 
