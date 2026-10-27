@@ -18,7 +18,7 @@ const PROVIDER = (process.env.AI_PROVIDER || 'groq').toLowerCase()
 // ── Model defaults per provider ──────────────────────────────────────────────
 const MODELS: Record<string, string> = {
   groq:        process.env.AI_MODEL || 'llama-3.1-8b-instant',      // universal free tier, very fast (~560 t/s)
-  gemini:      process.env.AI_MODEL || 'gemini-1.5-flash',           // free 15 rpm
+  gemini:      process.env.AI_MODEL || 'gemini-2.0-flash',           // current Gemini 2.0 Flash production model
   openrouter:  process.env.AI_MODEL || 'mistralai/mistral-7b-instruct:free',
 }
 
@@ -57,11 +57,11 @@ async function callGroq(system: string, userPrompt: string, modelOverride?: stri
 }
 
 // ── Gemini ────────────────────────────────────────────────────────────────────
-async function callGemini(system: string, userPrompt: string): Promise<string> {
+async function callGemini(system: string, userPrompt: string, modelOverride?: string): Promise<string> {
   const key = process.env.GEMINI_API_KEY
   if (!key) throw new Error('GEMINI_API_KEY is not set in .env.local')
 
-  const model = MODELS.gemini
+  const model = modelOverride || MODELS.gemini
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`
 
   const res = await fetch(url, {
@@ -76,6 +76,10 @@ async function callGemini(system: string, userPrompt: string): Promise<string> {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
+    if (res.status === 404 && model !== 'gemini-2.0-flash') {
+      console.warn(`Gemini model ${model} not available, falling back to gemini-2.0-flash`)
+      return callGemini(system, userPrompt, 'gemini-2.0-flash')
+    }
     throw new Error(`Gemini error ${res.status}: ${JSON.stringify(err?.error?.message || res.statusText)}`)
   }
 
@@ -157,11 +161,11 @@ async function callGroqChat(messages: AIMessage[], modelOverride?: string): Prom
   return data.choices?.[0]?.message?.content ?? ''
 }
 
-async function callGeminiChat(messages: AIMessage[]): Promise<string> {
+async function callGeminiChat(messages: AIMessage[], modelOverride?: string): Promise<string> {
   const key = process.env.GEMINI_API_KEY
   if (!key) throw new Error('GEMINI_API_KEY is not set in .env.local')
 
-  const model = MODELS.gemini
+  const model = modelOverride || MODELS.gemini
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`
 
   const systemMessage = messages.find(m => m.role === 'system')?.content || ''
@@ -187,6 +191,10 @@ async function callGeminiChat(messages: AIMessage[]): Promise<string> {
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}))
+    if (res.status === 404 && model !== 'gemini-2.0-flash') {
+      console.warn(`Gemini model ${model} not available, falling back to gemini-2.0-flash`)
+      return callGeminiChat(messages, 'gemini-2.0-flash')
+    }
     throw new Error(`Gemini error ${res.status}: ${JSON.stringify(err?.error?.message || res.statusText)}`)
   }
 
