@@ -221,6 +221,35 @@ async function callGeminiChat(messages: AIMessage[], modelIndex: number = 0): Pr
   return data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
 }
 
+async function callOpenRouterChat(messages: AIMessage[]): Promise<string> {
+  const key = process.env.OPENROUTER_API_KEY
+  if (!key) throw new Error('OPENROUTER_API_KEY is not set in .env.local')
+
+  const res = await fetch('https://openrouter.ai/api/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${key}`,
+      'HTTP-Referer': process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000',
+      'X-Title': 'BizBoost',
+    },
+    body: JSON.stringify({
+      model: MODELS.openrouter,
+      temperature: 0.7,
+      max_tokens: 1500,
+      messages: messages,
+    }),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}))
+    throw new Error(`OpenRouter error ${res.status}: ${err?.error?.message || res.statusText}`)
+  }
+
+  const data = await res.json()
+  return data.choices?.[0]?.message?.content ?? ''
+}
+
 export async function askAIChat(messages: AIMessage[]): Promise<string> {
   const primary = PROVIDER
   try {
