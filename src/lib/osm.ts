@@ -43,33 +43,35 @@ function getOSMQueryForBiz(bizType: string, lat: number, lon: number): string {
 
 export async function fetchOSMCompetitors(bizType: string, location: string): Promise<OSMCompetitor[] | null> {
   try {
-    // 1. Geocode location using Nominatim
+    // 1. Geocode location using Nominatim with a fast 3s timeout
     const searchUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(location + ', India')}&format=json&limit=1`;
     const searchRes = await fetch(searchUrl, {
       headers: { 'User-Agent': 'BizBoost/1.0 (contact@bizboost.com)' },
+      signal: AbortSignal.timeout(3000),
       next: { revalidate: 3600 } // Cache for 1 hour
-    });
+    }).catch(() => null);
     
-    if (!searchRes.ok) return null;
-    const searchData = await searchRes.json();
+    if (!searchRes || !searchRes.ok) return null;
+    const searchData = await searchRes.json().catch(() => null);
     if (!searchData || searchData.length === 0) return null;
 
     const lat = parseFloat(searchData[0].lat);
     const lon = parseFloat(searchData[0].lon);
 
-    // 2. Fetch shops/amenities using Overpass API
+    // 2. Fetch shops/amenities using Overpass API with a fast 4s timeout
     const osmQuery = getOSMQueryForBiz(bizType, lat, lon);
-    const overpassQuery = `[out:json][timeout:15];(${osmQuery});out body 10;`;
+    const overpassQuery = `[out:json][timeout:4];(${osmQuery});out body 10;`;
     
     const overpassUrl = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(overpassQuery)}`;
     const overpassRes = await fetch(overpassUrl, {
+      signal: AbortSignal.timeout(4000),
       next: { revalidate: 3600 }
-    });
+    }).catch(() => null);
 
-    if (!overpassRes.ok) return null;
-    const overpassData = await overpassRes.json();
+    if (!overpassRes || !overpassRes.ok) return null;
+    const overpassData = await overpassRes.json().catch(() => null);
 
-    if (!overpassData.elements || overpassData.elements.length === 0) {
+    if (!overpassData || !overpassData.elements || overpassData.elements.length === 0) {
       return [];
     }
 

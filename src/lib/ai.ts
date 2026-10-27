@@ -67,6 +67,7 @@ async function callGemini(system: string, userPrompt: string, modelOverride?: st
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(9000),
     body: JSON.stringify({
       system_instruction: { parts: [{ text: system }] },
       contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
@@ -187,6 +188,7 @@ async function callGeminiChat(messages: AIMessage[], modelOverride?: string, ret
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    signal: AbortSignal.timeout(9000),
     body: JSON.stringify(body),
   })
 
