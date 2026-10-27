@@ -13,7 +13,7 @@ export interface AIMessage {
   content: string
 }
 
-const PROVIDER = (process.env.AI_PROVIDER || 'groq').toLowerCase()
+const PROVIDER = (process.env.AI_PROVIDER || 'gemini').toLowerCase()
 
 // ── Model defaults per provider ──────────────────────────────────────────────
 const GEMINI_MODELS = [
@@ -68,13 +68,13 @@ async function callGemini(system: string, userPrompt: string, modelIndex: number
   const key = process.env.GEMINI_API_KEY
   if (!key) throw new Error('GEMINI_API_KEY is not set in .env.local')
 
-  const model = process.env.AI_MODEL || GEMINI_MODELS[modelIndex] || GEMINI_MODELS[0]
+  const model = (modelIndex === 0 && process.env.AI_MODEL) ? process.env.AI_MODEL : (GEMINI_MODELS[modelIndex] || GEMINI_MODELS[0])
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`
 
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    signal: AbortSignal.timeout(25000),
+    signal: AbortSignal.timeout(45000),
     body: JSON.stringify({
       system_instruction: { parts: [{ text: system }] },
       contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
@@ -183,7 +183,7 @@ async function callGeminiChat(messages: AIMessage[], modelIndex: number = 0): Pr
   const key = process.env.GEMINI_API_KEY
   if (!key) throw new Error('GEMINI_API_KEY is not set in .env.local')
 
-  const model = process.env.AI_MODEL || GEMINI_MODELS[modelIndex] || GEMINI_MODELS[0]
+  const model = (modelIndex === 0 && process.env.AI_MODEL) ? process.env.AI_MODEL : (GEMINI_MODELS[modelIndex] || GEMINI_MODELS[0])
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${key}`
 
   const systemMessage = messages.find(m => m.role === 'system')?.content || ''
@@ -204,7 +204,7 @@ async function callGeminiChat(messages: AIMessage[], modelIndex: number = 0): Pr
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    signal: AbortSignal.timeout(25000),
+    signal: AbortSignal.timeout(45000),
     body: JSON.stringify(body),
   })
 

@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { askAI, parseJSON } from '@/lib/ai'
 import { fetchOSMCompetitors } from '@/lib/osm'
 
+export const maxDuration = 60
+
 export async function POST(req: NextRequest) {
   try {
     const { action, locality, budget, businessType, businessName } = await req.json()

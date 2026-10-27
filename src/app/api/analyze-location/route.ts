@@ -2,27 +2,35 @@ import { NextRequest, NextResponse } from 'next/server'
 import { askAI, parseJSON } from '@/lib/ai'
 import { fetchOSMCompetitors } from '@/lib/osm'
 
+// Allow up to 60 seconds on Vercel Hobby plan
+export const maxDuration = 60
+
 async function fetchCompetitors(bizType: string, location: string, apiKey: string) {
-  if (apiKey) {
-    try {
-      const query = encodeURIComponent(`${bizType} in ${location}`)
-      const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${query}&key=${apiKey}`
-      const res = await fetch(url)
-      const data = await res.json()
-      if (data.results && data.results.length > 0) {
-        return data.results.slice(0, 6).map((p: any) => ({
-          name: p.name,
-          rating: p.rating ?? 'N/A',
-          total: p.user_ratings_total ?? 0,
-          address: p.formatted_address ?? '',
-        }))
+  try {
+    if (apiKey) {
+      try {
+        const query = encodeURIComponent(`${bizType} in ${location}`)
+        const url = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${query}&key=${apiKey}`
+        const res = await fetch(url, { signal: AbortSignal.timeout(5000) })
+        const data = await res.json()
+        if (data.results && data.results.length > 0) {
+          return data.results.slice(0, 6).map((p: any) => ({
+            name: p.name,
+            rating: p.rating ?? 'N/A',
+            total: p.user_ratings_total ?? 0,
+            address: p.formatted_address ?? '',
+          }))
+        }
+      } catch {
+        // Fallback to OSM
       }
-    } catch {
-      // Fallback to OSM
     }
+    // OpenStreetMap free fallback
+    return await fetchOSMCompetitors(bizType, location)
+  } catch {
+    // If all competitor fetching fails, return null and proceed without it
+    return null
   }
-  // OpenStreetMap free fallback
-  return fetchOSMCompetitors(bizType, location)
 }
 
 export async function POST(req: NextRequest) {
@@ -30,22 +38,20 @@ export async function POST(req: NextRequest) {
     const { bizType, location, usp, customers, placesApiKey } = await req.json()
     if (!bizType || !location) return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
 
-    const competitors = await fetchCompetitors(bizType, location, placesApiKey)
-
-    const competitorContext = competitors && competitors.length > 0
-      ? `Real competitor data from map database:\n` +
-        competitors.map((c: any) => `- ${c.name}: ${c.rating === 'Map Data' ? 'Physical Shop' : '⭐' + c.rating + ' (' + c.total + ' reviews)'} — ${c.address}`).join('\n')
-      : 'No live competitor data — estimate based on city and locality knowledge.'
+    // Run competitor fetch and AI call in parallel to save time.
+    // The AI call does not depend on competitor data for a useful result;
+    // if competitor data arrives first, we include it, otherwise we proceed without.
+    const competitorPromise = fetchCompetitors(bizType, location, placesApiKey).catch(() => null)
 
     const system = `You are a business location intelligence expert with deep knowledge of Indian cities,
 local markets, and consumer behaviour. Return ONLY raw JSON — no markdown fences, no preamble.`
 
-    const prompt = `Analyze this business opportunity in India:
+    // Build prompt without waiting for competitors (they are optional context)
+    const basePrompt = `Analyze this business opportunity in India:
 Business: ${bizType}
 Location: ${location}
 Services/USP: ${usp || 'Not specified'}
 Target customers: ${customers || 'General public'}
-${competitorContext}
 
 Return this EXACT JSON shape:
 {
@@ -72,6 +78,27 @@ Return this EXACT JSON shape:
     "Third action"
   ]
 }`
+
+    // Try to get competitors first (with a short race timeout so we don't block the AI call)
+    let competitors: any = null
+    try {
+      competitors = await Promise.race([
+        competitorPromise,
+        new Promise(resolve => setTimeout(() => resolve(null), 3000)),
+      ])
+    } catch {
+      competitors = null
+    }
+
+    const competitorContext = competitors && competitors.length > 0
+      ? `Real competitor data from map database:\n` +
+        competitors.map((c: any) => `- ${c.name}: ${c.rating === 'Map Data' ? 'Physical Shop' : c.rating + ' (' + c.total + ' reviews)'} — ${c.address}`).join('\n')
+      : 'No live competitor data — estimate based on city and locality knowledge.'
+
+    const prompt = basePrompt.replace(
+      'Return this EXACT JSON shape:',
+      competitorContext + '\n\nReturn this EXACT JSON shape:'
+    )
 
     const raw = await askAI(system, prompt)
     const result = parseJSON(raw)

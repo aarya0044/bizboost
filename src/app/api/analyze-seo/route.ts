@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { askAI, parseJSON } from '@/lib/ai'
 
+export const maxDuration = 60
+
 async function fetchPageSpeed(url: string) {
   if (!url || !url.startsWith('http')) return null
   try {
