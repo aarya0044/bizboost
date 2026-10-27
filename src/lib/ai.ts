@@ -17,10 +17,10 @@ const PROVIDER = (process.env.AI_PROVIDER || 'groq').toLowerCase()
 
 // ── Model defaults per provider ──────────────────────────────────────────────
 const GEMINI_MODELS = [
-  'gemini-1.5-flash-8b',
-  'gemini-3.8-flash',
   'gemini-2.5-flash',
-  'gemini-1.5-pro',
+  'gemini-3.8-flash',
+  'gemini-2.0-flash',
+  'gemini-3.5-flash-lite',
 ]
 
 const MODELS: Record<string, string> = {
@@ -74,7 +74,7 @@ async function callGemini(system: string, userPrompt: string, modelIndex: number
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    signal: AbortSignal.timeout(9000),
+    signal: AbortSignal.timeout(25000),
     body: JSON.stringify({
       system_instruction: { parts: [{ text: system }] },
       contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
@@ -204,7 +204,7 @@ async function callGeminiChat(messages: AIMessage[], modelIndex: number = 0): Pr
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    signal: AbortSignal.timeout(9000),
+    signal: AbortSignal.timeout(25000),
     body: JSON.stringify(body),
   })
 
