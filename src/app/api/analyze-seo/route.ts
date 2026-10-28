@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { askAI, parseJSON } from '@/lib/ai'
+import { askAIChat, AIMessage, parseJSON } from '@/lib/ai'
 
 export const maxDuration = 60
 
@@ -7,7 +7,7 @@ async function fetchPageSpeed(url: string) {
   if (!url || !url.startsWith('http')) return null
   try {
     const api = `https://www.googleapis.com/pagespeedonline/v5/runPagespeed?url=${encodeURIComponent(url)}&strategy=mobile`
-    const res = await fetch(api, { cache: 'no-store' })
+    const res = await fetch(api, { cache: 'no-store', signal: AbortSignal.timeout(8000) })
     const data = await res.json()
     const cats   = data.lighthouseResult?.categories
     const audits = data.lighthouseResult?.audits
@@ -41,10 +41,14 @@ export async function POST(req: NextRequest) {
 - Mobile friendly: ${speedData.mobileUsable}`
       : 'No website URL — give general recommendations.'
 
-    const system = `You are a senior SEO and digital marketing consultant specialising in Indian local
-businesses and SMBs. Return ONLY raw JSON — no markdown fences, no preamble.`
-
-    const prompt = `Digital strategy for an Indian local business:
+    const messages: AIMessage[] = [
+      {
+        role: 'system',
+        content: `You are a senior SEO and digital marketing consultant specialising in Indian local businesses and SMBs. Return ONLY raw JSON — no markdown fences, no preamble.`
+      },
+      {
+        role: 'user',
+        content: `Digital strategy for an Indian local business:
 Business: ${bizType}
 City: ${city}
 Platform: ${platform}
@@ -96,8 +100,10 @@ Return this EXACT JSON shape:
     "Fourth quick win"
   ]
 }`
+      }
+    ]
 
-    const raw = await askAI(system, prompt)
+    const raw = await askAIChat(messages)
     const result = parseJSON(raw)
     return NextResponse.json({ result, speedData })
   } catch (err: any) {

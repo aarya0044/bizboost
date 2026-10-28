@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { askAI, parseJSON } from '@/lib/ai'
-import { fetchOSMCompetitors } from '@/lib/osm'
+import { askAIChat, AIMessage, parseJSON } from '@/lib/ai'
 
 export const maxDuration = 60
 
@@ -14,13 +13,19 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'suggest-ideas' || action === 'suggestions') {
-      const system = `You are a professional business consultant specializing in local economies and retail trends in India. Return ONLY raw JSON — no markdown, no preamble, no explanation.`
-      const prompt = `Based on the following parameters, suggest exactly 3 highly specific, niche, and highly differentiated local business ideas that have strong growth potential, cater to specific market gaps in this locality, and fit the budget:
+      const messages: AIMessage[] = [
+        {
+          role: 'system',
+          content: `You are a professional business consultant specializing in local economies and retail trends in India. Return ONLY raw JSON — no markdown, no preamble, no explanation.`
+        },
+        {
+          role: 'user',
+          content: `Based on the following parameters, suggest exactly 3 highly specific, niche, and highly differentiated local business ideas that have strong growth potential, cater to specific market gaps in this locality, and fit the budget:
 Locality: ${locality}
 Budget Range: ${budget || 'Flexible'}
 
 CRITICAL GUIDELINES:
-- DO NOT suggest generic, cliché startup ideas (e.g. avoid plain coffee shops, cafes, co-working spaces, basic customized gift shops, gym/fitness centers, standard grocery stores, or plain organic food shops).
+- DO NOT suggest generic, cliche startup ideas (e.g. avoid plain coffee shops, cafes, co-working spaces, basic customized gift shops, gym/fitness centers, standard grocery stores, or plain organic food shops).
 - DO suggest highly focused micro-niches or specialized hybrid businesses (e.g., instead of a generic cafe, suggest a "Millet-Based Healthy Breakfast QSR" or "Pre-packaged South Indian Filter Coffee Pods & Brewing Kit Store"; instead of a pet shop, suggest a "Mobile Hydrotherapy Pet Grooming Spa"; instead of a clothing store, suggest an "Upcycled Denim & Custom Embroidery Atelier").
 - Make sure each suggestion is highly localized and contextually relevant to the demographics and culture of the target locality in India (e.g. if the area is an IT/office hub, address night shift needs or quick-grab healthy products; if residential, address home-delivery convenience, senior care, or children's learning).
 
@@ -35,8 +40,10 @@ Provide the response in this EXACT JSON shape:
     }
   ]
 }`
+        }
+      ]
 
-      const raw = await askAI(system, prompt)
+      const raw = await askAIChat(messages)
       const result = parseJSON<any>(raw)
       return NextResponse.json({ suggestions: result?.suggestions || [] })
     }
@@ -46,18 +53,17 @@ Provide the response in this EXACT JSON shape:
         return NextResponse.json({ error: 'Business type is required' }, { status: 400 })
       }
 
-      const competitors = await fetchOSMCompetitors(bizType, locality)
-      const competitorContext = competitors && competitors.length > 0
-        ? `Real physical competitor data from OpenStreetMap map listings in this locality:\n` +
-          competitors.map((c: any) => `- ${c.name} (Address: ${c.address})`).join('\n')
-        : 'No specific live competitor nodes returned from OpenStreetMap for this search. Estimate based on standard brand presence.'
-
-      const system = `You are a senior business strategist and advisor specializing in startup operations and local marketing in India. Return ONLY raw JSON — no markdown, no preamble, no explanation.`
-      const prompt = `Generate a comprehensive startup advisory roadmap for the selected business:
+      const messages: AIMessage[] = [
+        {
+          role: 'system',
+          content: `You are a senior business strategist and advisor specializing in startup operations and local marketing in India. Return ONLY raw JSON — no markdown, no preamble, no explanation.`
+        },
+        {
+          role: 'user',
+          content: `Generate a comprehensive startup advisory roadmap for the selected business:
 Business Type: ${bizType}
 Locality: ${locality}
 Budget Range: ${budget || 'Flexible'}
-${competitorContext}
 
 Provide the response in this EXACT JSON shape:
 {
@@ -73,8 +79,8 @@ Provide the response in this EXACT JSON shape:
   },
   "competition": {
     "isRisky": true,
-    "riskWarning": "Brutally honest, detailed assessment of whether this business is risky or saturated in this locality. For example, if it is a salon, identify major established competitors in India (e.g. Habib's, Jawed Habib, Geetanjali Salon, Enrich, Lakme) or dominant local studios, and clearly warn the user if there is too much competition so a new startup in this category is not generally recommended in this area.",
-    "proceedAdvice": "A string containing a list of 3-4 specific mitigation steps separated by newlines (\\n) that they MUST follow if they choose to proceed despite the high risk (e.g., micro-niche services, organic reels hook, localized subscription model). Make it concrete.",
+    "riskWarning": "Brutally honest, detailed assessment of whether this business is risky or saturated in this locality.",
+    "proceedAdvice": "A string containing a list of 3-4 specific mitigation steps separated by newlines that they MUST follow if they choose to proceed despite the high risk. Make it concrete.",
     "pricingLevel": "Low, Medium, or High",
     "competitorTypes": "Detailed description of local competitors in this locality, naming real brand chains or local types",
     "weaknesses": "Observed weaknesses or service gaps of existing competitors in the market",
@@ -99,8 +105,10 @@ Provide the response in this EXACT JSON shape:
     ]
   }
 }`
+        }
+      ]
 
-      const raw = await askAI(system, prompt)
+      const raw = await askAIChat(messages)
       const result = parseJSON<any>(raw)
       return NextResponse.json({ roadmap: result })
     }
